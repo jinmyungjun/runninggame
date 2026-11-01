@@ -1,0 +1,884 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}</style></head><body><title>런 퀘스트</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-column phone app. Setup → radar hunt screen (HUD, radar, monster panel, thumb-zone controls) → result.
+   Single dark theme on purpose: a night-dungeon radar that stays readable outdoors. */
+:root{
+  --bg:#0b1317; --panel:#111c22; --panel2:#17262d; --line:#24363e;
+  --text:#ece6d6; --mute:#8da1a6;
+  --player:#62e6d0; --mon:#ff7a59; --gold:#f4c95d; --ice:#9ad4ff;
+  --f-display:'Do Hyeon','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --f-body:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{background:var(--bg)}
+body{
+  margin:0;color:var(--text);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-block:14px 32px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-text-size-adjust:100%;
+}
+*{box-sizing:border-box}
+.wrap{max-width:460px;margin:0 auto}
+h1,h2,h3,p{margin:0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+a{color:var(--ice)}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- setup ---------- */
+.brand .kicker{font-size:12px;letter-spacing:.14em;color:var(--player);font-weight:600}
+.brand h1{font-family:var(--f-display);font-weight:400;font-size:44px;line-height:1.05;margin-top:4px;text-wrap:balance}
+.brand .lede{color:var(--mute);margin-top:8px;max-width:34ch;text-wrap:pretty}
+.profile{margin-top:18px;padding:12px 0;border-block:1px solid var(--line);display:grid;gap:8px}
+.profile .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.profile .lv{font-family:var(--f-display);font-size:20px;color:var(--gold)}
+.profile .meta{font-size:13px;color:var(--mute)}
+.xp{height:6px;background:var(--panel2);position:relative;overflow:hidden}
+.xp i{position:absolute;inset:0 auto 0 0;background:var(--gold);width:0;transition:width .5s}
+
+.field{padding:18px 0;border-bottom:1px solid var(--line);display:grid;gap:12px}
+.field .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.field .lab{font-weight:600;font-size:13px;letter-spacing:.06em;color:var(--mute)}
+.field .hint{font-size:13px;color:var(--mute)}
+.stepper{display:grid;grid-template-columns:60px minmax(0,1fr) 60px;align-items:center;gap:10px}
+.stepper button{height:56px;background:var(--panel2);border:1px solid var(--line);font-family:var(--f-display);font-size:28px;line-height:1;user-select:none}
+.stepper button:active{background:var(--line)}
+.stepper .val{text-align:center;font-family:var(--f-display);font-size:42px;line-height:1.1}
+.stepper .val small{font-family:var(--f-body);font-size:13px;color:var(--mute);display:block;margin-top:2px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line)}
+.seg button{height:44px;color:var(--mute);font-weight:500}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--panel2);color:var(--gold);box-shadow:inset 0 -3px 0 var(--gold)}
+input[type=range]{width:100%;accent-color:var(--gold);height:36px;margin:0}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chips button{padding:6px 12px;border:1px solid var(--line);color:var(--mute);font-size:13px;min-width:52px}
+.chips button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+.big-val{font-family:var(--f-display);font-size:30px;line-height:1}
+.forecast{padding:16px 0;color:var(--mute);font-size:14px;display:grid;gap:2px}
+.forecast b{color:var(--text);font-weight:600}
+.cta{display:block;width:100%;height:64px;background:var(--gold);color:#1a1405;font-family:var(--f-display);font-size:26px;letter-spacing:.04em;box-shadow:0 5px 0 #9c7a1c;transition:transform .08s,box-shadow .08s}
+.cta:active{transform:translateY(4px);box-shadow:0 1px 0 #9c7a1c}
+.note{font-size:13px;color:var(--mute);text-wrap:pretty}
+
+/* ---------- run ---------- */
+.hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-block:1px solid var(--line)}
+.hud>div{padding:8px 4px 6px;text-align:center;min-width:0}
+.hud>div+div{border-left:1px solid var(--line)}
+.hud .v{display:block;font-family:var(--f-display);font-size:26px;line-height:1.1;white-space:nowrap}
+.hud .l{display:block;font-size:11px;letter-spacing:.08em;color:var(--mute)}
+.goalbar{height:4px;background:var(--panel2);position:relative}
+.goalbar i{position:absolute;inset:0 auto 0 0;background:var(--player);width:0;transition:width .4s}
+.goaltxt{font-size:12px;color:var(--mute);text-align:right;margin-top:4px}
+.radar-wrap{position:relative;width:min(100%,46vh);min-width:260px;margin:10px auto 0;aspect-ratio:1;max-width:100%;transition:filter .4s}
+.radar-wrap.frozen{filter:grayscale(1) brightness(.8)}
+#radar{width:100%;height:100%;display:block}
+.banner{position:absolute;left:50%;top:12%;transform:translateX(-50%);background:var(--gold);color:#1a1405;font-family:var(--f-display);font-size:24px;line-height:1.2;padding:6px 16px;text-align:center;max-width:94%;box-shadow:0 4px 0 #9c7a1c;animation:pop .35s ease-out}
+.banner small{display:block;font-family:var(--f-body);font-size:12px;font-weight:600;margin-top:2px}
+@keyframes pop{from{transform:translateX(-50%) scale(.6);opacity:0}to{transform:translateX(-50%) scale(1);opacity:1}}
+.chip{position:absolute;right:4px;bottom:4px;font-size:11px;color:var(--mute);background:var(--bg);border:1px solid var(--line);padding:2px 8px}
+.mpanel{margin-top:12px;border:1px solid var(--line);background:var(--panel);padding:14px;display:grid;gap:10px}
+.mhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.mname{font-family:var(--f-display);font-size:22px;color:var(--mon)}
+.mdir{font-size:14px;color:var(--mute);white-space:nowrap}
+.mdist{font-family:var(--f-display);font-size:56px;line-height:1;letter-spacing:.01em}
+.mrow{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--mute);flex-wrap:wrap}
+.mrow .bonus.on{color:var(--gold)}
+.mbar{height:8px;background:var(--panel2);position:relative}
+.mbar i{position:absolute;inset:0 auto 0 0;background:var(--mon);width:0;transition:width .3s}
+.mlinks{display:flex;gap:14px;font-size:13px}
+.restnum{font-family:var(--f-display);font-size:72px;line-height:1;color:var(--player)}
+.controls{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;margin-top:12px}
+.controls .pausebtn{height:68px;background:var(--ice);color:#07151f;font-family:var(--f-display);font-size:26px;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 5px 0 #4f86ad}
+.controls .pausebtn:active{transform:translateY(4px);box-shadow:0 1px 0 #4f86ad}
+.controls .sub{height:68px;padding:0 14px;border:1px solid var(--line);background:var(--panel);font-size:13px;color:var(--mute);line-height:1.25}
+.skip{height:44px;border:1px solid var(--line);color:var(--text)}
+.notice{margin-top:10px;font-size:13px;color:var(--gold)}
+
+/* ---------- level bars ---------- */
+.prog{display:grid;gap:10px}
+.prog .pr{display:grid;gap:4px}
+.prog .pt{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--mute)}
+.xp.km i{background:var(--player)}
+.xp.kl i{background:var(--mon)}
+
+/* ---------- dex ---------- */
+.dexlink{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;padding:14px 0;border-bottom:1px solid var(--line);text-align:left}
+.dexlink .t{font-family:var(--f-display);font-size:22px;display:block}
+.dexlink .s{font-size:13px;color:var(--mute);display:block}
+.dexlink .go{color:var(--gold);font-family:var(--f-display);font-size:20px;white-space:nowrap}
+.back{height:44px;color:var(--mute);padding:0;font-size:14px}
+.dex h2{font-family:var(--f-display);font-weight:400;font-size:40px;margin-top:2px}
+.dex-sum{color:var(--mute);font-size:14px;margin-top:4px}
+.dex-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}
+.dcard{border:1px solid var(--line);background:var(--panel);padding:10px;display:grid;gap:4px;align-content:start;min-width:0}
+.dcard canvas{width:60px;height:45px;image-rendering:pixelated;margin-bottom:4px}
+.dcard .dno{font-size:11px;letter-spacing:.08em;color:var(--mute)}
+.dcard .dname{font-family:var(--f-display);font-size:20px;line-height:1.15}
+.dcard .dnote{font-size:12px;color:var(--mute);text-wrap:pretty}
+.dcard .dcnt{font-size:12px;color:var(--gold)}
+.dcard.locked{background:transparent;border-style:dashed}
+.dcard.locked .dname{color:var(--mute)}
+.dcard.done{border-color:#3d6556}
+.unlocks{margin-top:16px;border:1px solid var(--gold);padding:12px;display:grid;gap:10px}
+.unlocks h3{font-family:var(--f-display);font-weight:400;font-size:20px;color:var(--gold)}
+.unl{display:flex;align-items:center;gap:12px}
+.unl canvas{width:60px;height:45px;flex:none;image-rendering:pixelated}
+.unl .note{font-size:12px;color:var(--mute)}
+
+/* ---------- time stop ---------- */
+.pause{position:fixed;inset:0;z-index:20;background:rgba(7,18,26,.86);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;text-align:center;
+  padding:max(24px,env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(24px,env(safe-area-inset-left,0px))}
+.pause h2{font-family:var(--f-display);font-weight:400;font-size:52px;color:var(--ice);letter-spacing:.04em}
+.pause p{color:var(--mute);max-width:30ch;text-wrap:balance}
+.pause .ptime{font-family:var(--f-display);font-size:30px;color:var(--text)}
+.pause .resume{width:min(100%,380px);height:84px;background:var(--ice);color:#07151f;font-family:var(--f-display);font-size:30px;box-shadow:0 6px 0 #4f86ad;margin-top:10px}
+.pause .resume:active{transform:translateY(5px);box-shadow:0 1px 0 #4f86ad}
+
+/* ---------- result ---------- */
+.done h2{font-family:var(--f-display);font-weight:400;font-size:40px;margin-top:4px}
+.gain{font-family:var(--f-display);font-size:64px;line-height:1;color:var(--gold);margin-top:10px}
+.gain small{font-size:20px;color:var(--mute);margin-left:6px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:18px;border-top:1px solid var(--line)}
+.stats>div{padding:12px 0;border-bottom:1px solid var(--line)}
+.stats>div:nth-child(odd){padding-right:12px;border-right:1px solid var(--line)}
+.stats>div:nth-child(even){padding-left:14px}
+.stats .v{font-family:var(--f-display);font-size:30px;line-height:1.1}
+.stats .l{font-size:12px;color:var(--mute);letter-spacing:.06em}
+.log{margin-top:18px;overflow-x:auto}
+.log table{border-collapse:collapse;width:100%;font-size:13px;min-width:300px}
+.log th{font-weight:500;color:var(--mute);text-align:left;padding:6px 6px 6px 0;border-bottom:1px solid var(--line);font-size:12px}
+.log td{padding:8px 6px 8px 0;border-bottom:1px solid var(--line)}
+.log .gold{color:var(--gold)}
+.lvup{color:var(--gold);font-weight:600;margin-top:6px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<main class="wrap">
+
+  <!-- 설정 -->
+  <section id="s-setup">
+    <header class="brand">
+      <p class="kicker">GPS 러닝 RPG</p>
+      <h1>런 퀘스트</h1>
+      <p class="lede">내 페이스로 닿을 수 있는 거리에 몬스터가 나타나요. 달려가서 처치하면 다음 몬스터가 나옵니다.</p>
+    </header>
+
+    <div class="profile">
+      <div class="row"><span class="lv" id="p-lv"></span><span class="meta num" id="p-meta"></span></div>
+      <div class="prog" id="p-prog"></div>
+    </div>
+    <button class="dexlink" id="dex-open"><span><span class="t">몬스터 도감</span><span class="s" id="dex-s"></span></span><span class="go">열기 →</span></button>
+
+    <div class="field">
+      <div class="top"><span class="lab">평소 페이스</span><span class="hint">1km를 달리는 시간</span></div>
+      <div class="stepper">
+        <button id="pace-dn" aria-label="페이스 5초 빠르게">−</button>
+        <div class="val num"><span id="pace-val"></span><small id="pace-sub"></small></div>
+        <button id="pace-up" aria-label="페이스 5초 느리게">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="top"><span class="lab">목표</span></div>
+      <div class="seg" role="group" aria-label="목표 종류">
+        <button id="g-dist" aria-pressed="true">거리</button>
+        <button id="g-time" aria-pressed="false">시간</button>
+      </div>
+      <div class="stepper">
+        <button id="goal-dn" aria-label="목표 줄이기">−</button>
+        <div class="val num"><span id="goal-val"></span></div>
+        <button id="goal-up" aria-label="목표 늘리기">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="top"><span class="lab">처치 후 휴식</span><span class="big-val num" id="rest-val"></span></div>
+      <input type="range" id="rest" min="0" max="120" step="5" aria-label="휴식 시간(초)">
+      <div class="chips" id="rest-chips"></div>
+    </div>
+
+    <div class="field">
+      <div class="top"><span class="lab">위치</span></div>
+      <div class="seg" role="group" aria-label="위치 모드">
+        <button id="m-gps" aria-pressed="true">GPS로 달리기</button>
+        <button id="m-demo" aria-pressed="false">데모 (가상 달리기)</button>
+      </div>
+      <div class="chips" id="sim-chips" hidden></div>
+      <p class="note" id="mode-note"></p>
+    </div>
+
+    <div class="forecast" id="forecast"></div>
+    <button class="cta" id="start">원정 시작</button>
+  </section>
+
+  <!-- 달리기 -->
+  <section id="s-run" hidden>
+    <div class="hud">
+      <div><span class="v num" id="h-dist">0.00</span><span class="l">KM</span></div>
+      <div><span class="v num" id="h-time">00:00</span><span class="l">시간</span></div>
+      <div><span class="v num" id="h-kills">0</span><span class="l">처치</span></div>
+      <div><span class="v num" id="h-pace">--'--"</span><span class="l">페이스</span></div>
+    </div>
+    <div class="goalbar"><i id="goal-fill"></i></div>
+    <p class="goaltxt num" id="goal-txt"></p>
+
+    <div class="radar-wrap" id="radar-wrap">
+      <canvas id="radar" aria-label="몬스터 위치 레이더"></canvas>
+      <div class="banner" id="banner" hidden></div>
+      <div class="chip num" id="gps-chip"></div>
+    </div>
+
+    <div class="mpanel" id="p-loc">
+      <p class="mname" style="color:var(--player)">위치를 찾는 중</p>
+      <p class="note">GPS 신호를 잡으면 첫 몬스터가 나타나요. 하늘이 트인 곳에서 잠시 기다려 주세요.</p>
+    </div>
+
+    <div class="mpanel" id="p-hunt" hidden>
+      <div class="mhead"><span class="mname" id="m-name"></span><span class="mdir" id="m-dir"></span></div>
+      <div class="mdist num" id="m-dist"></div>
+      <div class="mbar"><i id="m-bar"></i></div>
+      <div class="mrow num"><span class="bonus" id="m-bonus"></span><span id="m-elapsed"></span></div>
+      <div class="mlinks"><a id="lk-kakao" target="_blank" rel="noopener">카카오맵에서 위치 보기</a><a id="lk-google" target="_blank" rel="noopener">구글 지도</a></div>
+    </div>
+
+    <div class="mpanel" id="p-rest" hidden>
+      <div class="mhead"><span class="mname" style="color:var(--player)">휴식 중</span><span class="mdir">다음 몬스터 소환까지</span></div>
+      <div class="restnum num" id="r-left"></div>
+      <div class="mbar"><i id="r-bar" style="background:var(--player)"></i></div>
+      <button class="skip" id="r-skip">바로 소환하기</button>
+    </div>
+
+    <div class="controls">
+      <button class="pausebtn" id="btn-pause">
+        <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="4" y="3" width="5" height="16" fill="currentColor"/><rect x="13" y="3" width="5" height="16" fill="currentColor"/></svg>
+        시간 정지
+      </button>
+      <button class="sub" id="btn-reroll">위치<br>바꾸기</button>
+      <button class="sub" id="btn-end">종료</button>
+    </div>
+    <p class="notice" id="notice" hidden></p>
+  </section>
+
+  <!-- 도감 -->
+  <section id="s-dex" class="dex" hidden>
+    <button class="back" id="dex-back">← 돌아가기</button>
+    <h2>몬스터 도감</h2>
+    <p class="dex-sum num" id="dex-sum"></p>
+    <p class="note" style="margin-top:6px">레벨은 누적 거리와 누적 처치 수를 둘 다 채워야 올라가요. 단계가 오를수록 더 많이 필요해요.</p>
+    <div class="chips" id="dex-chips" style="margin-top:14px"></div>
+    <div class="dex-grid" id="dex-grid"></div>
+  </section>
+
+  <!-- 결과 -->
+  <section id="s-done" class="done" hidden>
+    <p class="brand"><span class="kicker" style="font-size:12px;letter-spacing:.14em;color:var(--player);font-weight:600">원정 결과</span></p>
+    <h2 id="d-title">원정 완료</h2>
+    <div class="gain num"><span id="d-exp">0</span><small>EXP</small></div>
+    <p class="lvup" id="d-lvup" hidden></p>
+    <div class="profile" style="margin-top:14px">
+      <div class="row"><span class="lv" id="d-lv"></span><span class="meta num" id="d-meta"></span></div>
+      <div class="prog" id="d-prog"></div>
+    </div>
+    <div class="unlocks" id="d-unlock" hidden><h3>새 몬스터 해금</h3><div id="d-unl" style="display:grid;gap:10px"></div></div>
+    <div class="stats">
+      <div><div class="v num" id="d-dist"></div><div class="l">거리</div></div>
+      <div><div class="v num" id="d-time"></div><div class="l">시간</div></div>
+      <div><div class="v num" id="d-pace"></div><div class="l">평균 페이스</div></div>
+      <div><div class="v num" id="d-kills"></div><div class="l">처치 · 보너스</div></div>
+    </div>
+    <div class="log"><table><thead><tr><th>몬스터</th><th>거리</th><th>걸린 시간</th><th>EXP</th></tr></thead><tbody id="d-log"></tbody></table></div>
+    <button class="dexlink" id="d-dex" style="margin-top:14px"><span><span class="t">몬스터 도감</span><span class="s" id="d-dexs"></span></span><span class="go">보기 →</span></button>
+    <button class="cta" id="again" style="margin-top:20px">다시 설정하기</button>
+  </section>
+</main>
+
+<!-- 시간 정지 -->
+<div class="pause" id="pause" hidden role="dialog" aria-label="시간 정지">
+  <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="38" fill="none" stroke="var(--ice)" stroke-width="3"/><circle cx="42" cy="42" r="28" fill="none" stroke="var(--ice)" stroke-width="1.5" stroke-dasharray="3 6"/><rect x="31" y="27" width="8" height="30" fill="var(--ice)"/><rect x="45" y="27" width="8" height="30" fill="var(--ice)"/></svg>
+  <h2>시간 정지</h2>
+  <p>신호등이나 횡단보도에서 쉬는 동안 기록, 거리, 몬스터 타이머가 모두 멈춰 있어요.</p>
+  <div class="ptime num" id="pz-time">00:00</div>
+  <button class="resume" id="btn-resume">다시 달리기</button>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+var pad=function(n){return String(n).padStart(2,'0')};
+var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- storage ---------- */
+var store={
+  get:function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+var cfg=Object.assign({paceSec:360,goalType:'dist',goalDist:3,goalMin:30,rest:30,mode:'gps',simSpeed:30},store.get('rq_cfg',{}));
+var prof=Object.assign({exp:0,runs:0,kills:0,km:0,dex:{}},store.get('rq_prof',{}));
+
+/* ---------- format ---------- */
+function fmtPace(sec){var m=Math.floor(sec/60),s=Math.round(sec%60);if(s===60){m++;s=0}return m+"'"+pad(s)+'"'}
+function fmtTime(ms){var s=Math.max(0,Math.floor(ms/1000)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;return h>0?h+':'+pad(m)+':'+pad(r):pad(m)+':'+pad(r)}
+function fmtDist(m){return m<1000?Math.round(m)+'m':(m/1000).toFixed(2)+'km'}
+
+/* ---------- geo ---------- */
+var RE=6371000,D2R=Math.PI/180;
+function hav(a,b){var dl=(b.lat-a.lat)*D2R,dg=(b.lng-a.lng)*D2R;var s=Math.pow(Math.sin(dl/2),2)+Math.cos(a.lat*D2R)*Math.cos(b.lat*D2R)*Math.pow(Math.sin(dg/2),2);return 2*RE*Math.asin(Math.min(1,Math.sqrt(s)))}
+function bearing(a,b){var y=Math.sin((b.lng-a.lng)*D2R)*Math.cos(b.lat*D2R);var x=Math.cos(a.lat*D2R)*Math.sin(b.lat*D2R)-Math.sin(a.lat*D2R)*Math.cos(b.lat*D2R)*Math.cos((b.lng-a.lng)*D2R);return (Math.atan2(y,x)/D2R+360)%360}
+function dest(a,d,brg){var dl=d/RE,t=brg*D2R,p1=a.lat*D2R,l1=a.lng*D2R;var p2=Math.asin(Math.sin(p1)*Math.cos(dl)+Math.cos(p1)*Math.sin(dl)*Math.cos(t));var l2=l1+Math.atan2(Math.sin(t)*Math.sin(dl)*Math.cos(p1),Math.cos(dl)-Math.sin(p1)*Math.sin(p2));return {lat:p2/D2R,lng:((l2/D2R+540)%360)-180}}
+function offsetM(from,to){return {x:(to.lng-from.lng)*D2R*RE*Math.cos(from.lat*D2R),y:(to.lat-from.lat)*D2R*RE}}
+
+/* ---------- level ---------- */
+/* 레벨업 조건: 누적 거리와 누적 처치 수를 둘 다 채워야 한다. 단계가 오를수록 필요량이 늘어난다. */
+var LV_MAX=50;
+var TITLES=[[1,'견습 러너'],[3,'숲길 사냥꾼'],[6,'새벽 추적자'],[9,'던전 러너'],[13,'협곡 정복자'],[17,'야간 순찰자'],[22,'심연 탐험가'],[27,'마왕성 도전자'],[33,'용 사냥꾼'],[40,'전설의 주자'],[46,'신화의 개척자'],[50,'러닝 마스터']];
+function titleOf(l){var t=TITLES[0][1];TITLES.forEach(function(x){if(l>=x[0])t=x[1]});return t}
+function stepKm(i){return 0.8+0.5*i}
+function stepKills(i){return Math.max(2,Math.round(stepKm(i)*(1.5+0.012*i)))}
+function kmNeed(L){var s=0;for(var i=1;i<L;i++)s+=stepKm(i);return Math.round(s*10)/10}
+function killNeed(L){var s=0;for(var i=1;i<L;i++)s+=stepKills(i);return s}
+function lvOfP(km,kills){var l=1;while(l<LV_MAX&&km>=kmNeed(l+1)&&kills>=killNeed(l+1))l++;return l}
+function curLv(){return lvOfP(prof.km,prof.kills)}
+function bar(cls,label,txt,f){return '<div class="pr"><div class="pt"><span>'+label+'</span><span class="num">'+txt+'</span></div><div class="xp '+cls+'"><i style="width:'+Math.round(f*100)+'%"></i></div></div>'}
+function paintLevel(lvEl,metaEl,progEl){
+  var l=curLv();
+  lvEl.textContent='Lv.'+l+' '+titleOf(l);
+  metaEl.textContent='총 '+prof.exp+' EXP';
+  if(l>=LV_MAX){progEl.innerHTML='<p class="note">최고 레벨에 도달했어요.</p>';return}
+  var kA=kmNeed(l),kB=kmNeed(l+1),nA=killNeed(l),nB=killNeed(l+1);
+  var f1=Math.max(0,Math.min(1,(prof.km-kA)/(kB-kA))),f2=Math.max(0,Math.min(1,(prof.kills-nA)/(nB-nA)));
+  progEl.innerHTML=bar('km','다음 레벨까지 거리',Math.min(prof.km,kB).toFixed(1)+' / '+kB.toFixed(1)+' km',f1)
+    +bar('kl','다음 레벨까지 처치',Math.min(prof.kills,nB)+' / '+nB+'마리',f2);
+}
+
+/* ---------- monsters ---------- */
+function P(b,h,m,k){return {b:b,h:h,m:m,k:k,w:'#ffffff'}}
+var SPR={
+ slime:["............","....kkkk....","..kkbbhbkk..",".kbbhbbbbbk.",".kbwkbbwkbk.",".kbbbbbbbbk.","kbbbbmmbbbbk","kbbbbbbbbbbk",".kkkkkkkkkk."],
+ bat:["k..........k","kk..k..k..kk","kbkkbbbbkkbk","kbbbbbbbbbbk",".kbbwkbwkbk.","..kbbbbbbk..","...kbmmbk...","....kkkk....","............"],
+ skull:["...kkkkkk...","..kbbbbbbk..",".kbbbbbbbbk.",".kbkkbbkkbk.",".kbkkbbkkbk.",".kbbbkkbbbk.","..kbbbbbbk..","..kbkbkbbk..","...kkkkkk..."],
+ golem:["..kkkkkkkk..",".kbbbbbbbbk.",".kbwkbbwkbk.",".kbbbbbbbbk.","kkbbmmmmbbkk","kbbkkkkkkbbk","kbbkbbbbkbbk","kbbkbbbbkbbk",".kkk....kkk."],
+ ghost:["...kkkkkk...","..kbbbbbbk..",".kbbbbbbbbk.",".kbwkbbwkbk.",".kbbbbbbbbk.",".kbbbmmbbbk.",".kbbbbbbbbk.",".kbkbbkbbkbk",".k.k.kk.k.k."],
+ mush:["...kkkkkk...","..kmmmhmmk..",".kmmhmmmmmmk","kmmmmmmhmmmk","kkkkkkkkkkkk","...kbbbbk...","...kbwkwkbk.","...kbbbbbk..","...kkkkkk..."],
+ imp:["k..........k","kk........kk",".kbkkkkkkbk.",".kbbbbbbbbk.",".kbwkbbwkbk.",".kbbbbbbbbk.","..kbmmmmbk..","..kbkbbkbk..","...kk..kk..."],
+ dragon:["..k......k..",".kbk....kbk.",".kbbkkkkbbk.","kbbbbbbbbbbk","kbwkbbbbwkbk","kbbbbbbbbbbk",".kbbmbbmbbk.","..kbbbbbbk..","...kkkkkk..."],
+ spider:["k..........k",".k..kkkk..k.","..kkbbbbkk..","k.kbwbbwbk.k",".kkbbmmbbkk.","k.kbbbbbbk.k","..kkbbbbkk..",".k..kkkk..k.","k..........k"],
+ wolf:["k..........k","kk........kk","kbk......kbk","kbbkkkkkkbbk",".kbwkbbwkbk.",".kbbbbbbbbk.","..kbbkkbbk..","..kbmmmmbk..","...kkkkkk..."],
+ eye:["....kkkk....","..kkbbbbkk..",".kbbwwwwbbk.","kbbwwkkwwbbk","kbbwkmmkwbbk","kbbwwkkwwbbk",".kbbwwwwbbk.","..kkbbbbkk..","....kkkk...."],
+ flame:[".....kk.....","....kbbk....","...kbbhbk...","..kbbhhbbk..","..kbhhhhbk..",".kbbhwkhbbk.",".kbbbhhbbbk.","..kbbbbbbk..","...kkkkkk..."],
+ treant:["..kkkkkkkk..",".kbbhbbhbbk.","kbbbbbbbbbbk","kbhbbbhbbbbk",".kkkkkkkkkk.","...kmwmwk...","...kmmmmk...","..kmmkkmmk..","..kkk..kkk.."],
+ snake:["...kkkkkk...","..kbbbbbbk..",".kbwkbbwkbk.",".kbbbbbbbbk.","..kbbmmbbk..","...kbbbbk...","..kbbbbk....",".kbbbbbbkkk.","..kkkkkkbbk."],
+ crab:["kk........kk","kbk......kbk","kbbk....kbbk",".kkkkkkkkkk.",".kbwkbbwkbk.","kbbbbbbbbbbk","kbbbmmmmbbbk",".kbkbkkbkbk.","..k.k..k.k.."],
+ mimic:["..kkkkkkkk..",".kbbbbbbbbk.","kbbhbbbbhbbk","kkkkkkkkkkkk","kmkwkwkwkwmk","kmmkkkkkkmmk","kbmmmmmmmmbk","kbbbbbbbbbbk",".kkkkkkkkkk."],
+ knight:["....kkkk....","...kbbbbk...","..kbbhhbbk..","..kbbbbbbk..","..kkkkkkkk..","..kbkmmkbk..","..kbbbbbbk..",".kbbkbbkbbk.","..kkk..kkk.."]
+ ,orc:["...kkkkkk...","..kbbbbbbk..",".kbbbbbbbbk.",".kkkkkkkkkk.",".kbwkbbwkbk.",".kbbbbbbbbk.","kbbwbmmbwbbk",".kbbbbbbbbk.","..kkkkkkkk.."],
+ wizard:[".....kk.....","....kbbk....","...kbbbbk...","..kbbbmbbk..",".kkkkkkkkkk.","..khhhhhhk..","..khkhhkhk..","..kwwwwwwk..",".kbbwwwwbbk."],
+ bee:["..kk....kk..",".kwwk..kwwk.",".kwwwkkwwwk.","..kkbbbbkk..","..kbwkkwbk..","..kkkkkkkk..","..kbbbbbbk..","...kkkkkk...","....kmmk...."],
+ owl:["k..........k","kbk......kbk","kbbkkkkkkbbk","kbwwkbbkwwbk","kbwkkbbkkwbk","kbbbbmmbbbbk",".kbbhhhhbbk.","..kbhhhhbk..","...kk..kk..."]
+};
+var MON=[
+ {id:'slime',name:'슬라임',spr:'slime',lv:1,pal:P('#7bd96f','#c4f5a8','#2a6b2f','#10201a'),note:'어디서나 보이는 말랑한 녀석. 달리는 발소리에 몸을 떤다.'},
+ {id:'bat',name:'동굴 박쥐',spr:'bat',lv:1,pal:P('#9a7bf0','#c2aefa','#ff7a59','#1a1030'),note:'빛을 싫어해서 해 질 무렵에 더 자주 나타난다.'},
+ {id:'mush',name:'독버섯',spr:'mush',lv:2,pal:P('#f2e6c9','#ffffff','#d9503f','#2b1612'),note:'비 온 뒤 숲길에 돋아난다. 밟지 말고 처치할 것.'},
+ {id:'bee',name:'성난 벌',spr:'bee',lv:3,pal:P('#f2c94c','#fff1a8','#8a4b1c','#2a2008'),note:'벌집을 건드린 러너를 끝까지 따라온다.'},
+ {id:'spider',name:'숲 거미',spr:'spider',lv:4,pal:P('#5b7a3a','#8fb35e','#d9503f','#12200c'),note:'나뭇가지 사이에 실을 쳐 두고 러너를 기다린다.'},
+ {id:'owl',name:'밤 올빼미',spr:'owl',lv:5,pal:P('#8a6b4a','#d9b98a','#f2c94c','#1f160d'),note:'고개를 돌려 러너의 뒤를 끝까지 지켜본다.'},
+ {id:'mossslime',name:'이끼 슬라임',spr:'slime',lv:5,pal:P('#5f9c55','#a8d49e','#1f4a22','#0d1f0f'),note:'축축한 돌길에서 이끼처럼 번져 나간다.'},
+ {id:'skull',name:'해골 병사',spr:'skull',lv:6,pal:P('#e9e2cf','#ffffff','#8a7f66','#2a2420'),note:'갑옷을 잃어버린 채 오래된 길을 계속 걷는다.'},
+ {id:'frost',name:'얼음 슬라임',spr:'slime',lv:7,pal:P('#7cc7ff','#d6efff','#2f6a9c','#0f2233'),note:'몸이 차가워서 겨울 새벽에 더 활발하다.'},
+ {id:'toxic',name:'독 슬라임',spr:'slime',lv:8,pal:P('#b36bd9','#e0b3f5','#4a1a66','#1a0d26'),note:'닿은 자리마다 보랏빛 얼룩이 남는다.'},
+ {id:'wolf',name:'회색 늑대',spr:'wolf',lv:9,pal:P('#8d97a6','#c2c9d4','#d9503f','#1a1f29'),note:'무리에서 떨어져 나와 혼자 러너를 따라온다.'},
+ {id:'ghost',name:'떠도는 유령',spr:'ghost',lv:10,pal:P('#cfe3ff','#ffffff','#6b7bd6','#1a2240'),note:'벽을 지나다니지만 달리기 속도는 느린 편이다.'},
+ {id:'crab',name:'바위 게',spr:'crab',lv:11,pal:P('#c98a5a','#e8b98c','#7a3b22','#2a1710'),note:'집게가 단단해서 정면으로 부딪히면 아프다.'},
+ {id:'goblin',name:'고블린',spr:'orc',lv:12,pal:P('#7fbf6a','#b9e3a8','#7a3b22','#14230f'),note:'작고 재빠르다. 러너의 물통을 노린다.'},
+ {id:'golem',name:'바위 골렘',spr:'golem',lv:13,pal:P('#8f9aa3','#b9c2c9','#ff7a59','#1d252b'),note:'느리지만 한번 막아서면 끈질기게 버틴다.'},
+ {id:'ember',name:'불씨 버섯',spr:'mush',lv:13,pal:P('#f2e6c9','#ffffff','#ff8a3d','#2b1612'),note:'갓 끝에서 작은 불씨가 톡톡 튄다.'},
+ {id:'icebat',name:'얼음 박쥐',spr:'bat',lv:14,pal:P('#7cc7ff','#d6efff','#ffffff','#0f2233'),note:'날개를 칠 때마다 서늘한 바람이 인다.'},
+ {id:'wisp',name:'도깨비불',spr:'flame',lv:15,pal:P('#4fd6c0','#c8fff4','#1a6b60','#07201d'),note:'푸른 불꽃이 길 위를 떠다니며 러너를 유인한다.'},
+ {id:'lake',name:'호수의 망령',spr:'ghost',lv:16,pal:P('#7fe0d0','#d4fff8','#2a8a80','#0b2a27'),note:'물가 산책로에서 안개와 함께 나타난다.'},
+ {id:'imp',name:'불꽃 임프',spr:'imp',lv:17,pal:P('#ff6a3d','#ff9a6e','#ffd166','#2a0f08'),note:'작은 불씨를 흘리며 도망치는 장난꾸러기.'},
+ {id:'snake',name:'늪 뱀',spr:'snake',lv:18,pal:P('#8fa83c','#c7dc77','#d9503f','#1c240a'),note:'질척한 길목에 숨어 있다가 발목 근처로 튀어나온다.'},
+ {id:'blackwolf',name:'검은 늑대',spr:'wolf',lv:18,pal:P('#4a4f5c','#7d8494','#ff5a3d','#0c0e14'),note:'달 없는 밤에만 보인다. 눈빛만 따라오는 듯하다.'},
+ {id:'glow',name:'빛 버섯',spr:'mush',lv:19,pal:P('#b8f0ff','#ffffff','#3aa9d9','#0a2230'),note:'어두운 길에서 스스로 빛을 내 러너를 홀린다.'},
+ {id:'hornet',name:'독침 말벌',spr:'bee',lv:20,pal:P('#e0553a','#ff9a7a','#ffd166','#2a0a05'),note:'침이 길고 빠르다. 직선으로 날아와 들이받는다.'},
+ {id:'vamp',name:'흡혈 박쥐',spr:'bat',lv:21,pal:P('#d6455d','#ff8aa0','#ffd166','#2a0a12'),note:'페이스가 빨라질수록 더 가까이 날아든다.'},
+ {id:'crystal',name:'수정 거미',spr:'spider',lv:21,pal:P('#6fd0ff','#c9f0ff','#ffffff','#0a2233'),note:'몸이 투명해서 가까이 오기 전까지 보이지 않는다.'},
+ {id:'treant',name:'가시 나무정령',spr:'treant',lv:22,pal:P('#4f9b4a','#8fd48a','#8a5a34','#12230f'),note:'오래된 가로수에 깃들어 지나가는 러너를 감시한다.'},
+ {id:'apprentice',name:'견습 마법사',spr:'wizard',lv:23,pal:P('#5a7bd6','#f0c9a0','#f2c94c','#14183a'),note:'주문을 자주 틀리지만 가끔은 제대로 맞는다.'},
+ {id:'lavaslime',name:'용암 슬라임',spr:'slime',lv:24,pal:P('#ff8a3d','#ffd09a','#a8340f','#2a0f08'),note:'지나간 자리의 아스팔트가 따뜻해진다.'},
+ {id:'sandgolem',name:'사암 골렘',spr:'golem',lv:24,pal:P('#d9b36a','#f0d8a0','#ff7a59','#2a1f0a'),note:'바람이 불면 몸에서 모래가 흩날린다.'},
+ {id:'moss',name:'이끼 골렘',spr:'golem',lv:25,pal:P('#6fa36b','#a6d4a1','#f4c95d','#16241a'),note:'오래된 숲을 지키는 파수꾼. 몸에 이끼가 자란다.'},
+ {id:'watcher',name:'눈알 감시자',spr:'eye',lv:26,pal:P('#b57bd9','#e0b8f5','#ff7a59','#241033'),note:'눈을 깜빡이지 않는다. 러너의 속도를 전부 기억한다.'},
+ {id:'orcwar',name:'오크 전사',spr:'orc',lv:27,pal:P('#5a8a3a','#9bc47a','#d9503f','#10200a'),note:'방패 없이 돌진한다. 피하기보다 맞서는 편이 낫다.'},
+ {id:'widow',name:'맹독 거미',spr:'spider',lv:28,pal:P('#9b3d8f','#d88ad0','#9dff7a','#1c0a1a'),note:'독이 강해서 스치기만 해도 다리에 힘이 빠진다.'},
+ {id:'knight',name:'해골 기사',spr:'skull',lv:29,pal:P('#6c7a94','#b9c4d6','#ff7a59','#0f1420'),note:'무너진 성벽 위를 끝없이 순찰한다.'},
+ {id:'orcrogue',name:'오크 도적',spr:'orc',lv:29,pal:P('#7a5a9c','#b49bd4','#ffd166','#1a1030'),note:'어둠을 틈타 러너의 뒤를 잡는다.'},
+ {id:'flameskull',name:'화염 해골',spr:'skull',lv:30,pal:P('#ff9a3d','#ffe08a','#ff3d1a','#2a0f08'),note:'턱뼈가 부딪힐 때마다 불꽃이 튄다.'},
+ {id:'mimic',name:'미믹',spr:'mimic',lv:31,pal:P('#a8743a','#d9a35f','#c43a4a','#2a1708'),note:'길가에 놓인 보물상자인 척하다가 갑자기 입을 연다.'},
+ {id:'frostwolf',name:'서리 늑대',spr:'wolf',lv:32,pal:P('#dfe9f5','#ffffff','#4a90d9','#2a3447'),note:'숨결이 닿는 곳마다 서리가 내려앉는다.'},
+ {id:'icemage',name:'얼음 마법사',spr:'wizard',lv:33,pal:P('#7cc7ff','#f0d0b0','#ffffff','#0f2233'),note:'지팡이를 휘두르면 발밑 길이 얼어붙는다.'},
+ {id:'shadowbat',name:'그림자 박쥐',spr:'bat',lv:34,pal:P('#3a3550','#6a6488','#ff5a3d','#0a0910'),note:'어둠에 녹아들어 날개 소리만 들린다.'},
+ {id:'firewatch',name:'불꽃 감시자',spr:'eye',lv:34,pal:P('#ff8a3d','#ffd09a','#ffd166','#2a0f08'),note:'시선이 닿는 곳이 따뜻해지다 못해 뜨거워진다.'},
+ {id:'armor',name:'떠도는 갑옷',spr:'knight',lv:35,pal:P('#aab4c2','#e3e9f0','#ff7a59','#1c2230'),note:'안에는 아무도 없는데 투구 속에서 불빛이 새어 나온다.'},
+ {id:'wyrm',name:'새끼 드래곤',spr:'dragon',lv:36,pal:P('#58c4a4','#9fe8d0','#ffd166','#0e2a22'),note:'아직 작지만 불 뿜는 연습은 이미 끝냈다.'},
+ {id:'lava',name:'용암 골렘',spr:'golem',lv:37,pal:P('#5a3a33','#8a5a4a','#ff9a3d','#1a0e0c'),note:'몸 틈새로 용암이 흐른다. 지나간 길이 그을린다.'},
+ {id:'orcchief',name:'오크 대장',spr:'orc',lv:38,pal:P('#a83a2a','#e07a65','#ffd166','#2a0a05'),note:'부하들을 이끌고 다닌다. 혼자 있을 때가 드물다.'},
+ {id:'abyss',name:'심연의 유령',spr:'ghost',lv:39,pal:P('#7f6fd6','#b3a8f0','#ff7a59','#150f33'),note:'깊은 밤에만 나타난다. 눈이 마주치면 다리가 무거워진다.'},
+ {id:'goldslime',name:'황금 슬라임',spr:'slime',lv:40,pal:P('#f2c94c','#fff1a8','#a8741a','#2a2008'),note:'매우 드물고 매우 빠르다. 잡으면 운이 좋아진다고 한다.'},
+ {id:'hellfire',name:'지옥불',spr:'flame',lv:41,pal:P('#ff5a3d','#ffd166','#7a1a0c','#2a0a05'),note:'꺼지지 않는 불꽃. 따라가면 길을 잃는다.'},
+ {id:'duskowl',name:'황혼 올빼미',spr:'owl',lv:42,pal:P('#b86a9c','#f0b3d9','#ffd166','#2a0f22'),note:'해가 질 때만 날개를 편다. 울음소리가 길게 남는다.'},
+ {id:'overeye',name:'심연의 눈',spr:'eye',lv:43,pal:P('#d6455d','#ff8aa0','#ffd166','#2a0a12'),note:'어둠 속에서 크게 뜨인 눈. 도망칠 곳이 없다.'},
+ {id:'darkslime',name:'어둠 슬라임',spr:'slime',lv:44,pal:P('#4a3d6b','#8a7bb5','#ff5a3d','#0d0a18'),note:'그림자가 덩어리진 듯한 모습. 형체가 자꾸 바뀐다.'},
+ {id:'bonedrake',name:'뼈 드래곤',spr:'dragon',lv:44,pal:P('#e9e2cf','#ffffff','#ff5a3d','#2a2420'),note:'오래전에 죽은 용. 날개 대신 뼈만 덜그럭거린다.'},
+ {id:'blackknight',name:'흑기사',spr:'knight',lv:45,pal:P('#4a3d6b','#8a7bb5','#ff5a3d','#0d0a18'),note:'마왕성의 문지기. 단 한 번도 길을 비킨 적이 없다.'},
+ {id:'darkmage',name:'어둠의 마법사',spr:'wizard',lv:46,pal:P('#4a3d6b','#d9b99a','#ff5a3d','#0d0a18'),note:'금지된 주문으로 러너의 그림자를 훔친다.'},
+ {id:'thunderowl',name:'천둥 올빼미',spr:'owl',lv:46,pal:P('#f2e04c','#fffbb3','#4a90d9','#2a2608'),note:'날갯짓마다 먼 곳에서 천둥 소리가 난다.'},
+ {id:'lich',name:'해골 군주',spr:'skull',lv:47,pal:P('#d9c58a','#fff3c4','#ff5a3d','#1f1608'),note:'죽은 병사들을 이끄는 왕. 왕관만은 아직 쓰고 있다.'},
+ {id:'frostdrake',name:'서리 용',spr:'dragon',lv:48,pal:P('#6aa9ff','#bcd9ff','#ffffff','#0e1c33'),note:'얼음 숨결로 길 전체를 얼려 버린다.'},
+ {id:'orclord',name:'오크 군주',spr:'orc',lv:49,pal:P('#d4a24c','#ffe29a','#ff5a3d','#2a1a08'),note:'수많은 전장을 넘나든 늙은 전사. 눈빛이 날카롭다.'},
+ {id:'elder',name:'고룡',spr:'dragon',lv:50,pal:P('#d4a24c','#ffe29a','#ff5a3d','#2a1a08'),note:'전설 속의 주인. 여기까지 달려온 러너만 마주친다.'}
+];
+var dexFilter='all';
+function drawSprite(ctx,mon,x,y,px,flat){
+  var sp=SPR[mon.spr],pal=mon.pal,w=sp[0].length,h=sp.length;
+  for(var r=0;r<h;r++)for(var c=0;c<w;c++){
+    var ch=sp[r][c];if(ch==='.')continue;
+    ctx.fillStyle=flat?(ch==='k'?flat[1]:flat[0]):(pal[ch]||pal.b);
+    ctx.fillRect(Math.round(x-w*px/2+c*px),Math.round(y-h*px/2+r*px),px,px);
+  }
+}
+function spriteCanvas(c,mon,px,flat){
+  var d=2,w=12*px,h=9*px;c.width=w*d;c.height=h*d;
+  var g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);drawSprite(g,mon,w/2,h/2,px,flat);
+}
+function pickMonster(sec){
+  var lv=curLv(),pool=[];
+  MON.forEach(function(m,i){if(m.lv<=lv)pool.push(i)});
+  var t=Math.max(0,Math.min(1,(sec-70)/140)),n=pool.length;
+  var ws=pool.map(function(idx,j){var u=n>1?j/(n-1):0.5;return 0.2+Math.exp(-Math.pow(u-t,2)/0.12)+(j>=n-2?0.6:0)});
+  var sum=ws.reduce(function(a,b){return a+b},0),r=Math.random()*sum;
+  for(var j=0;j<n;j++){r-=ws[j];if(r<=0)return pool[j]}
+  return pool[n-1];
+}
+function dexSummary(){
+  var n=0,u=0,lv=curLv();
+  MON.forEach(function(m){if(((prof.dex||{})[m.id]||{}).kills>0)n++;if(lv>=m.lv)u++});
+  return '처치 '+n+'/'+MON.length+' · 해금 '+u+'/'+MON.length;
+}
+function nextUnlockText(){
+  var lv=curLv(),nx=MON.filter(function(m){return m.lv>lv})[0];
+  return nx?' · 다음 해금 Lv.'+nx.lv:' · 전부 해금';
+}
+function paintDex(){
+  var lv=curLv(),grid=$('#dex-grid');grid.innerHTML='';
+  $('#dex-sum').textContent=dexSummary()+' · 현재 Lv.'+lv;
+  var ch=$('#dex-chips');ch.innerHTML='';
+  [['all','전체'],['won','처치함'],['todo','미처치'],['lock','잠김']].forEach(function(f){
+    var bt=document.createElement('button');bt.textContent=f[1];bt.setAttribute('aria-pressed',dexFilter===f[0]);
+    bt.onclick=function(){dexFilter=f[0];paintDex()};ch.appendChild(bt);
+  });
+  var shown=0;
+  MON.forEach(function(m,i){
+    var e=(prof.dex||{})[m.id]||{kills:0},open=lv>=m.lv,won=e.kills>0;
+    var ok=dexFilter==='all'||(dexFilter==='won'&&won)||(dexFilter==='todo'&&open&&!won)||(dexFilter==='lock'&&!open);
+    if(!ok)return;shown++;
+    var card=document.createElement('div');card.className='dcard'+(open?'':' locked')+(won?' done':'');
+    var c=document.createElement('canvas');spriteCanvas(c,m,5,won?null:['#1b2a31','#2e444e']);
+    var no=document.createElement('div');no.className='dno';no.textContent='No.'+pad(i+1);
+    var nm=document.createElement('div');nm.className='dname';nm.textContent=open?m.name:'???';
+    var nt=document.createElement('div');nt.className='dnote';
+    nt.textContent=won?m.note:(open?'해금됨 · 아직 처치하지 못했어요':'Lv.'+m.lv+'에 해금');
+    card.appendChild(c);card.appendChild(no);card.appendChild(nm);
+    if(won){var k=document.createElement('div');k.className='dcnt num';k.textContent='처치 '+e.kills+'마리';card.appendChild(k)}
+    card.appendChild(nt);grid.appendChild(card);
+  });
+  if(!shown){var em=document.createElement('p');em.className='note';em.style.gridColumn='1 / -1';em.textContent='해당하는 몬스터가 없어요.';grid.appendChild(em)}
+}
+
+/* ---------- setup UI ---------- */
+function save(){store.set('rq_cfg',cfg)}
+function hold(btn,fn){
+  var t,iv;function stop(){clearTimeout(t);clearInterval(iv)}
+  btn.addEventListener('pointerdown',function(e){e.preventDefault();fn();t=setTimeout(function(){iv=setInterval(fn,90)},380)});
+  ['pointerup','pointerleave','pointercancel'].forEach(function(ev){btn.addEventListener(ev,stop)});
+  btn.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fn()}});
+}
+var clamp=function(v,a,b){return Math.max(a,Math.min(b,v))};
+var CHIP_REST=[0,30,60,90,120],CHIP_SIM=[10,30,60];
+
+function paintSetup(){
+  paintLevel($('#p-lv'),$('#p-meta'),$('#p-prog'));
+  $('#dex-s').textContent=dexSummary()+nextUnlockText();
+  $('#pace-val').textContent=fmtPace(cfg.paceSec)+' /km';
+  $('#pace-sub').textContent=(3600/cfg.paceSec).toFixed(1)+' km/h';
+  var gd=cfg.goalType==='dist';
+  $('#g-dist').setAttribute('aria-pressed',gd);$('#g-time').setAttribute('aria-pressed',!gd);
+  $('#goal-val').textContent=gd?cfg.goalDist.toFixed(1)+' km':cfg.goalMin+' 분';
+  $('#rest').value=cfg.rest;$('#rest-val').textContent=cfg.rest+'초';
+  Array.prototype.forEach.call($('#rest-chips').children,function(b){b.setAttribute('aria-pressed',Number(b.dataset.v)===cfg.rest)});
+  var demo=cfg.mode==='demo';
+  $('#m-gps').setAttribute('aria-pressed',!demo);$('#m-demo').setAttribute('aria-pressed',demo);
+  $('#sim-chips').hidden=!demo;
+  Array.prototype.forEach.call($('#sim-chips').children,function(b){b.setAttribute('aria-pressed',Number(b.dataset.v)===cfg.simSpeed)});
+  $('#mode-note').textContent=demo
+    ?'가상의 러너가 몬스터를 향해 자동으로 달려요. 게임 흐름을 미리 확인할 때 쓰세요. 속도 배율을 고를 수 있어요.'
+    :'실제 위치로 달려요. 처음에 위치 권한을 허용해 주세요. 권한이 없으면 데모 모드로 시작합니다.';
+  var d=150/cfg.paceSec*1000,n,txt;
+  if(gd){n=Math.max(1,Math.round(cfg.goalDist*1000/d));txt='몬스터 약 <b>'+n+'마리</b>'}
+  else{n=Math.max(1,Math.round(cfg.goalMin*60/(150+cfg.rest)));txt='몬스터 약 <b>'+n+'마리</b>'}
+  $('#forecast').innerHTML='<span>'+txt+' 출몰 예정</span><span>한 마리까지 평균 <b>약 '+Math.round(d/10)*10+'m</b>, 달려서 <b>약 2분 30초</b></span>';
+}
+function initSetup(){
+  hold($('#pace-dn'),function(){cfg.paceSec=clamp(cfg.paceSec-5,180,720);paintSetup()});
+  hold($('#pace-up'),function(){cfg.paceSec=clamp(cfg.paceSec+5,180,720);paintSetup()});
+  hold($('#goal-dn'),function(){if(cfg.goalType==='dist')cfg.goalDist=clamp(Math.round((cfg.goalDist-0.5)*10)/10,0.5,42);else cfg.goalMin=clamp(cfg.goalMin-5,5,240);paintSetup()});
+  hold($('#goal-up'),function(){if(cfg.goalType==='dist')cfg.goalDist=clamp(Math.round((cfg.goalDist+0.5)*10)/10,0.5,42);else cfg.goalMin=clamp(cfg.goalMin+5,5,240);paintSetup()});
+  $('#g-dist').onclick=function(){cfg.goalType='dist';paintSetup()};
+  $('#g-time').onclick=function(){cfg.goalType='time';paintSetup()};
+  $('#rest').oninput=function(){cfg.rest=Number(this.value);paintSetup()};
+  CHIP_REST.forEach(function(v){var b=document.createElement('button');b.textContent=v+'초';b.dataset.v=v;b.onclick=function(){cfg.rest=v;paintSetup()};$('#rest-chips').appendChild(b)});
+  CHIP_SIM.forEach(function(v){var b=document.createElement('button');b.textContent='×'+v;b.dataset.v=v;b.onclick=function(){cfg.simSpeed=v;paintSetup()};$('#sim-chips').appendChild(b)});
+  $('#m-gps').onclick=function(){cfg.mode='gps';paintSetup()};
+  $('#m-demo').onclick=function(){cfg.mode='demo';paintSetup()};
+  $('#start').onclick=startRun;
+  paintSetup();
+}
+
+/* ---------- run state ---------- */
+var R=null,tickIv=null,raf=null,ac=null,bannerT=null,endT=null;
+function beep(freqs){
+  try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+    freqs.forEach(function(f,i){var o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=f;g.gain.value=0.04;o.connect(g);g.connect(ac.destination);var t=ac.currentTime+i*0.09;o.start(t);o.stop(t+0.08)})}catch(e){}
+}
+function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+function setNotice(msg){var n=$('#notice');if(msg){n.textContent=msg;n.hidden=false}else n.hidden=true}
+function show(id){['#s-setup','#s-run','#s-dex','#s-done'].forEach(function(s){$(s).hidden=(s!==id)});window.scrollTo(0,0)}
+
+function startRun(){
+  save();
+  try{ac=ac||new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+  R={phase:'locating',paused:false,active:0,hunt:0,pausedMs:0,dist:0,huntDist:0,kills:0,bonus:0,exp:0,
+     pos:null,last:null,heading:null,trail:[],monster:null,restLeft:0,restTotal:0,log:[],demo:false,watch:null,wl:null,
+     lastTick:performance.now(),rangeDisp:100,acc:null,lastKill:null,startLv:curLv(),savedDist:0};
+  show('#s-run');setNotice('');$('#pause').hidden=true;
+  $('#banner').hidden=true;
+  $('#btn-end').innerHTML='종료';
+  if(cfg.mode==='demo'){startDemo('')}else{startGps()}
+  lock();
+  clearInterval(tickIv);tickIv=setInterval(tick,200);
+  cancelAnimationFrame(raf);raf=requestAnimationFrame(frame);
+  render();
+}
+function startDemo(msg){
+  R.demo=true;if(msg)setNotice(msg);
+  onPos({lat:37.5665,lng:126.9780,acc:5});
+}
+function startGps(){
+  if(!('geolocation' in navigator)){startDemo('이 기기에서는 위치를 쓸 수 없어 데모 모드로 시작했어요.');return}
+  var got=false;
+  try{
+    R.watch=navigator.geolocation.watchPosition(function(p){
+      got=true;onPos({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy||999});
+    },function(err){
+      if(!got&&!R.demo){stopGps();startDemo(err&&err.code===1?'위치 권한이 없어 데모 모드로 시작했어요. 실제 달리기는 브라우저에서 위치 권한을 허용해 주세요.':'위치를 찾지 못해 데모 모드로 시작했어요.')}
+      else if(got){setNotice('GPS 신호가 약해요. 하늘이 트인 곳으로 이동해 보세요.')}
+    },{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+  }catch(e){startDemo('위치를 쓸 수 없어 데모 모드로 시작했어요.')}
+}
+function stopGps(){if(R&&R.watch!=null){try{navigator.geolocation.clearWatch(R.watch)}catch(e){}R.watch=null}}
+function lock(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(function(l){if(R)R.wl=l}).catch(function(){})}catch(e){}}
+function unlock(){try{R&&R.wl&&R.wl.release()}catch(e){}}
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&R&&R.phase!=='done')lock()});
+
+function onPos(p){
+  if(!R||R.phase==='done')return;
+  R.acc=p.acc;
+  if(R.phase==='locating'){
+    R.pos=p;
+    if(p.acc>80){render();return}
+    R.last=p;spawn();render();return;
+  }
+  if(R.paused){R.pos=p;R.last=p;return}
+  if(R.last){
+    var d=hav(R.last,p);
+    if(d>=100){R.last=p}
+    else if(p.acc<=40&&d>=3){
+      R.dist+=d;if(R.phase==='hunting')R.huntDist+=d;
+      if(d>=5)R.heading=bearing(R.last,p);
+      R.trail.push({lat:p.lat,lng:p.lng});if(R.trail.length>90)R.trail.shift();
+      R.last=p;
+    }
+  }
+  R.pos=p;
+  if(R.phase==='hunting')checkArrive();
+}
+function checkArrive(){
+  var m=R.monster;if(!m)return;
+  var rad=R.demo?18:Math.max(20,Math.min(R.acc||0,40));
+  if(hav(R.pos,m)<=rad)kill();
+}
+
+function spawn(){
+  var win=90+Math.random()*120,d=win/cfg.paceSec*1000;
+  if(cfg.goalType==='dist'){
+    var rem=cfg.goalDist*1000-R.dist;
+    if(rem<60){finish();return}
+    if(d>rem)d=Math.max(60,rem);
+  }
+  d=Math.max(60,d);
+  var sec=d/1000*cfg.paceSec;
+  var idx=pickMonster(sec);
+  var brg=R.heading!=null?R.heading+(Math.random()-0.5)*120:Math.random()*360;
+  var pt=dest(R.pos,d,brg);
+  R.monster={lat:pt.lat,lng:pt.lng,d0:d,target:sec*1000,elapsed:0,idx:idx};
+  R.phase='hunting';
+  var dd=hav(R.pos,R.monster);R.rangeDisp=Math.max(100,dd*1.3);
+  beep([196,262]);buzz(60);
+}
+function reroll(){
+  if(!R||R.phase!=='hunting'||R.paused)return;
+  var m=R.monster,pt=dest(R.pos,m.d0,Math.random()*360);
+  m.lat=pt.lat;m.lng=pt.lng;m.elapsed=0;
+  R.rangeDisp=Math.max(100,m.d0*1.3);
+}
+function kill(){
+  var m=R.monster,onTime=m.elapsed<=m.target,mon=MON[m.idx];
+  var exp=Math.round(m.d0/5*(1+0.03*m.idx)*(onTime?1.5:1));
+  var lvBefore=curLv();
+  R.exp+=exp;R.kills++;if(onTime)R.bonus++;
+  prof.exp+=exp;prof.kills++;prof.km+=(R.dist-R.savedDist)/1000;R.savedDist=R.dist;
+  if(!prof.dex)prof.dex={};
+  var e=prof.dex[mon.id]||(prof.dex[mon.id]={kills:0});e.kills++;
+  store.set('rq_prof',prof);
+  var lvAfter=curLv();
+  R.log.push({name:mon.name,exp:exp,onTime:onTime,ms:m.elapsed,d:m.d0});
+  var sub='+'+exp+' EXP'+(onTime?' · 보너스':'');
+  if(lvAfter>lvBefore){
+    var nu=MON.filter(function(x){return x.lv>lvBefore&&x.lv<=lvAfter}).map(function(x){return x.name});
+    banner('레벨 업! Lv.'+lvAfter,sub+(nu.length?' · '+nu.join(', ')+' 해금':''),3200);
+    beep([392,523,659,784,1047]);buzz([80,40,80,40,160]);
+  }else{
+    banner('처치!',sub,1900);beep([392,523,659]);buzz([80,40,80]);
+  }
+  R.monster=null;
+  if(goalDone()){finish();return}
+  if(cfg.goalType==='dist'&&cfg.goalDist*1000-R.dist<60){finish();return}
+  if(cfg.rest>0){R.phase='resting';R.restLeft=cfg.rest*1000;R.restTotal=cfg.rest*1000}
+  else spawn();
+  render();
+}
+function banner(a,b,ms){
+  var el=$('#banner');el.innerHTML=a+'<small>'+b+'</small>';el.hidden=false;
+  el.style.animation='none';void el.offsetWidth;el.style.animation='';
+  clearTimeout(bannerT);bannerT=setTimeout(function(){el.hidden=true},ms||1900);
+}
+function goalDone(){return cfg.goalType==='dist'?R.dist>=cfg.goalDist*1000:R.active>=cfg.goalMin*60000}
+
+function simStep(dt){
+  if(R.phase!=='hunting'||!R.monster)return;
+  var v=1000/cfg.paceSec*cfg.simSpeed*dt/1000;
+  var d=hav(R.pos,R.monster),step=Math.min(v,d);
+  var b=bearing(R.pos,R.monster)+(Math.random()-0.5)*14;
+  var np=dest(R.pos,step,b);
+  onPos({lat:np.lat,lng:np.lng,acc:5});
+}
+function tick(){
+  if(!R||R.phase==='done')return;
+  var now=performance.now(),dt=now-R.lastTick;R.lastTick=now;
+  if(R.paused){R.pausedMs+=dt;paintPause();return}
+  if(R.phase==='locating'){return}
+  R.active+=dt;
+  if(R.phase==='hunting'){
+    R.hunt+=dt;if(R.monster)R.monster.elapsed+=dt;
+    if(R.demo)simStep(dt);
+  }else if(R.phase==='resting'){
+    R.restLeft-=dt;
+    if(R.restLeft<=0){spawn()}
+  }
+  if(R.phase!=='done'&&goalDone()){finish();return}
+  render();
+}
+
+/* ---------- time stop ---------- */
+function setPause(on){
+  if(!R||R.phase==='done'||R.phase==='locating')return;
+  R.paused=on;R.lastTick=performance.now();
+  if(on){R.last=R.pos;$('#pause').hidden=false;paintPause();buzz(40)}
+  else{R.last=R.pos;$('#pause').hidden=true;beep([330,440]);buzz(40)}
+  $('#radar-wrap').classList.toggle('frozen',on);
+  render();
+}
+function paintPause(){$('#pz-time').textContent='정지 '+fmtTime(R.pausedMs)}
+
+/* ---------- finish ---------- */
+function finish(){
+  if(!R||R.phase==='done')return;
+  R.phase='done';stopGps();unlock();clearInterval(tickIv);
+  $('#pause').hidden=true;$('#radar-wrap').classList.remove('frozen');
+  var before=R.startLv;
+  prof.km+=(R.dist-R.savedDist)/1000;R.savedDist=R.dist;prof.runs++;store.set('rq_prof',prof);
+  var after=curLv();
+  $('#d-title').textContent=goalDone()?'목표 달성':'원정 종료';
+  $('#d-exp').textContent=R.exp;
+  var lu=$('#d-lvup');if(after>before){lu.textContent='레벨 업! Lv.'+before+' → Lv.'+after;lu.hidden=false}else lu.hidden=true;
+  paintLevel($('#d-lv'),$('#d-meta'),$('#d-prog'));
+  var nu=MON.filter(function(x){return x.lv>before&&x.lv<=after}),ub=$('#d-unlock'),ul=$('#d-unl');
+  ul.innerHTML='';ub.hidden=!nu.length;
+  nu.forEach(function(x){
+    var row=document.createElement('div');row.className='unl';
+    var c=document.createElement('canvas');spriteCanvas(c,x,5,null);
+    var t=document.createElement('div'),b=document.createElement('b'),n=document.createElement('div');
+    b.textContent=x.name+' · Lv.'+x.lv;n.className='note';n.textContent=x.note;t.appendChild(b);t.appendChild(n);
+    row.appendChild(c);row.appendChild(t);ul.appendChild(row);
+  });
+  $('#d-dexs').textContent=dexSummary();
+  $('#d-dist').textContent=(R.dist/1000).toFixed(2)+' km';
+  $('#d-time').textContent=fmtTime(R.active);
+  $('#d-pace').textContent=R.huntDist>50?fmtPace(R.hunt/R.huntDist):"--'--\"";
+  $('#d-kills').textContent=R.kills+'마리 · '+R.bonus;
+  var rows=R.log.map(function(r){return '<tr><td>'+r.name+(r.onTime?' <span class="gold">보너스</span>':'')+'</td><td class="num">'+Math.round(r.d)+'m</td><td class="num">'+fmtTime(r.ms)+'</td><td class="num">+'+r.exp+'</td></tr>'}).join('');
+  $('#d-log').innerHTML=rows||'<tr><td colspan="4" style="color:var(--mute)">처치한 몬스터가 없어요.</td></tr>';
+  beep([523,659,784,1047]);buzz([100,50,100,50,200]);
+  show('#s-done');
+}
+
+/* ---------- render (DOM) ---------- */
+var DIRS=['북','북동','동','남동','남','남서','서','북서'],ARR=['↑','↗','→','↘','↓','↙','←','↖'];
+function render(){
+  if(!R||R.phase==='done')return;
+  $('#h-dist').textContent=(R.dist/1000).toFixed(2);
+  $('#h-time').textContent=fmtTime(R.active);
+  $('#h-kills').textContent=R.kills;
+  $('#h-pace').textContent=R.huntDist>50?fmtPace(R.hunt/R.huntDist):"--'--\"";
+  var gd=cfg.goalType==='dist',frac=gd?R.dist/(cfg.goalDist*1000):R.active/(cfg.goalMin*60000);
+  $('#goal-fill').style.width=clamp(frac*100,0,100)+'%';
+  $('#goal-txt').textContent=gd?'목표 '+(R.dist/1000).toFixed(2)+' / '+cfg.goalDist.toFixed(1)+' km':'목표 '+fmtTime(R.active)+' / '+cfg.goalMin+':00';
+  $('#gps-chip').textContent=R.demo?'데모 ×'+cfg.simSpeed:(R.acc?'GPS ±'+Math.round(R.acc)+'m':'GPS 대기');
+  $('#p-loc').hidden=R.phase!=='locating';
+  $('#p-hunt').hidden=R.phase!=='hunting';
+  $('#p-rest').hidden=R.phase!=='resting';
+  $('#btn-reroll').disabled=R.phase!=='hunting';$('#btn-reroll').style.opacity=R.phase==='hunting'?1:.4;
+  if(R.phase==='hunting'&&R.monster&&R.pos){
+    var m=R.monster,dn=hav(R.pos,m),b=bearing(R.pos,m),k=Math.round(b/45)%8;
+    $('#m-name').textContent=MON[m.idx].name;
+    $('#m-dir').textContent=ARR[k]+' '+DIRS[k]+'쪽';
+    $('#m-dist').textContent=fmtDist(dn);
+    $('#m-bar').style.width=clamp((1-dn/m.d0)*100,0,100)+'%';
+    var rem=m.target-m.elapsed,bo=$('#m-bonus');
+    bo.textContent=rem>0?'보너스까지 '+fmtTime(rem):'보너스 시간 지남';bo.classList.toggle('on',rem>0);
+    $('#m-elapsed').textContent='경과 '+fmtTime(m.elapsed)+' · 목표 '+fmtTime(m.target);
+    $('#lk-kakao').href='https://map.kakao.com/link/map/'+encodeURIComponent('몬스터')+','+m.lat.toFixed(6)+','+m.lng.toFixed(6);
+    $('#lk-google').href='https://www.google.com/maps/search/?api=1&query='+m.lat.toFixed(6)+','+m.lng.toFixed(6);
+  }
+  if(R.phase==='resting'){
+    $('#r-left').textContent=Math.ceil(R.restLeft/1000)+'초';
+    $('#r-bar').style.width=clamp((1-R.restLeft/R.restTotal)*100,0,100)+'%';
+  }
+}
+
+/* ---------- radar (canvas) ---------- */
+var cv=$('#radar'),ctx=cv.getContext('2d');
+var C=null;
+function colors(){var s=getComputedStyle(document.documentElement);C={};['line','mute','player','mon','gold','ice','bg','panel'].forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+var RANGES=[100,150,200,300,400,500,750,1000,1500,2000,3000,5000];
+function frame(ts){
+  raf=requestAnimationFrame(frame);
+  if(!R||$('#s-run').hidden)return;
+  draw(ts);
+}
+function draw(ts){
+  var w=cv.clientWidth;if(!w)return;if(!C)colors();
+  var dpr=Math.min(window.devicePixelRatio||1,2),px=Math.round(w*dpr);
+  if(cv.width!==px){cv.width=px;cv.height=px}
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,w);
+  var cx=w/2,cy=w/2,rr=w/2-6;
+  var frozen=R.paused,t=frozen?0:ts;
+  /* disc */
+  ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);ctx.fillStyle=C.panel;ctx.fill();
+  ctx.strokeStyle=C.line;ctx.lineWidth=1.5;ctx.stroke();
+  /* range */
+  var m=R.monster,dn=(m&&R.pos)?hav(R.pos,m):0;
+  var want=Math.max(100,dn*1.3),target=RANGES[RANGES.length-1];
+  for(var i=0;i<RANGES.length;i++){if(RANGES[i]>=want){target=RANGES[i];break}}
+  if(!frozen)R.rangeDisp+=(target-R.rangeDisp)*(RM?1:0.06);
+  var range=R.rangeDisp,scale=rr/range;
+  /* rings */
+  var steps=[25,50,100,250,500,1000,2000],step=steps[steps.length-1];
+  for(i=0;i<steps.length;i++){if(range/steps[i]<=4){step=steps[i];break}}
+  ctx.font='11px '+getComputedStyle(document.body).fontFamily;ctx.textAlign='left';
+  for(var r=step;r<range;r+=step){
+    ctx.beginPath();ctx.arc(cx,cy,r*scale,0,Math.PI*2);ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle=C.mute;ctx.fillText(r>=1000?(r/1000)+'km':r+'m',cx+4,cy-r*scale-3);
+  }
+  ctx.beginPath();ctx.moveTo(cx-rr,cy);ctx.lineTo(cx+rr,cy);ctx.moveTo(cx,cy-rr);ctx.lineTo(cx,cy+rr);ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle=C.mute;ctx.textAlign='center';ctx.fillText('N',cx,cy-rr+14);
+  /* sweep */
+  if(!RM&&!frozen){
+    var a0=(ts/2600)%1*Math.PI*2;
+    for(i=0;i<22;i++){
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,rr-1,a0-(i+1)*0.045-Math.PI/2,a0-i*0.045-Math.PI/2);ctx.closePath();
+      ctx.globalAlpha=0.16*(1-i/22);ctx.fillStyle=C.player;ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  if(R.pos){
+    /* trail */
+    if(R.trail.length>1){
+      ctx.beginPath();
+      R.trail.forEach(function(p,i){var o=offsetM(R.pos,p),x=cx+o.x*scale,y=cy-o.y*scale;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+      ctx.strokeStyle=C.player;ctx.globalAlpha=0.45;ctx.lineWidth=2;ctx.stroke();ctx.globalAlpha=1;
+    }
+    /* monster */
+    if(m){
+      var o=offsetM(R.pos,m),mx=o.x*scale,my=-o.y*scale,L=Math.hypot(mx,my),lim=rr-26;
+      if(L>lim){mx*=lim/L;my*=lim/L}
+      var X=cx+mx,Y=cy+my;
+      ctx.setLineDash([4,5]);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(X,Y);ctx.strokeStyle=C.mon;ctx.globalAlpha=0.5;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+      var ar=Math.max(12,(R.demo?18:Math.max(20,Math.min(R.acc||0,40)))*scale);
+      ctx.beginPath();ctx.arc(X,Y,ar,0,Math.PI*2);ctx.strokeStyle=C.mon;ctx.setLineDash([3,4]);ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+      var bob=(RM||frozen)?0:Math.sin(t/260)*2,sp=Math.max(3,Math.round(w/70));
+      ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(X,Y+sp*5,sp*4.5,sp*1.2,0,0,Math.PI*2);ctx.fill();
+      drawSprite(ctx,MON[m.idx],X,Y+bob,sp);
+    }
+    /* player */
+    if(!RM&&!frozen){
+      var pr=10+((ts/900)%1)*18;ctx.beginPath();ctx.arc(cx,cy,pr,0,Math.PI*2);ctx.strokeStyle=C.player;ctx.globalAlpha=1-(pr-10)/18;ctx.lineWidth=2;ctx.stroke();ctx.globalAlpha=1;
+    }
+    if(R.heading!=null){
+      var th=R.heading*D2R;ctx.save();ctx.translate(cx,cy);ctx.rotate(th);
+      ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(6,-5);ctx.lineTo(-6,-5);ctx.closePath();ctx.fillStyle=C.player;ctx.fill();ctx.restore();
+    }
+    ctx.beginPath();ctx.arc(cx,cy,6,0,Math.PI*2);ctx.fillStyle=C.player;ctx.fill();ctx.strokeStyle=C.bg;ctx.lineWidth=2;ctx.stroke();
+  }
+}
+
+/* ---------- controls ---------- */
+$('#btn-pause').onclick=function(){setPause(true)};
+$('#btn-resume').onclick=function(){setPause(false)};
+$('#btn-reroll').onclick=reroll;
+$('#r-skip').onclick=function(){if(R&&R.phase==='resting'){spawn();render()}};
+$('#btn-end').onclick=function(){
+  var b=this;
+  if(b.dataset.arm==='1'){b.dataset.arm='0';clearTimeout(endT);b.innerHTML='종료';finish()}
+  else{b.dataset.arm='1';b.innerHTML='한 번 더<br>누르면 종료';clearTimeout(endT);endT=setTimeout(function(){b.dataset.arm='0';b.innerHTML='종료'},3000)}
+};
+$('#again').onclick=function(){R=null;cancelAnimationFrame(raf);paintSetup();show('#s-setup')};
+window.addEventListener('keydown',function(e){if(e.key==='Escape'&&R&&!R.paused&&R.phase!=='done'&&!$('#s-run').hidden)setPause(true)});
+
+var dexFrom='#s-setup';
+function openDex(from){dexFrom=from;paintDex();show('#s-dex')}
+$('#dex-open').onclick=function(){openDex('#s-setup')};
+$('#d-dex').onclick=function(){openDex('#s-done')};
+$('#dex-back').onclick=function(){if(dexFrom==='#s-setup')paintSetup();show(dexFrom)};
+
+initSetup();
+})();
+</script>
+</body></html>
